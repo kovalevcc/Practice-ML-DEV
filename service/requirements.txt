@@ -1,0 +1,7 @@
+streamlit
+sqlalchemy
+pydantic
+celery
+redis
+passlib
+pyjwt==2.1.0
