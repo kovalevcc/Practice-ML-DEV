@@ -1,6 +1,6 @@
 import pickle
 import pandas as pd
-# from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
