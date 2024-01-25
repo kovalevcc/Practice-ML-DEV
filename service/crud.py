@@ -12,7 +12,13 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    db_billing_account = models.BillingAccount(UserID=db_user.UserID, Points=100)
+    db.add(db_billing_account)
+    db.commit()
+
     return db_user
+
 
 def get_billing_account(db: Session, user_id: int):
     return db.query(models.BillingAccount).filter(models.BillingAccount.UserID == user_id).first()

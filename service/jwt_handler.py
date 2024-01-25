@@ -7,7 +7,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)  # Default to 15 minutes
+        expire = datetime.utcnow() + timedelta(minutes=15)  # Default 15 minutes
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, Config.SECRET_KEY, algorithm="HS256")
     return encoded_jwt
@@ -15,6 +15,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 def decode_access_token(token: str):
     try:
         decoded_data = jwt.decode(token, Config.SECRET_KEY, algorithms=["HS256"])
-        return decoded_data if decoded_data["exp"] >= datetime.utcnow() else None
+        current_timestamp = int(datetime.utcnow().timestamp())
+        return decoded_data if decoded_data["exp"] >= current_timestamp else None
     except jwt.PyJWTError:
         return None

@@ -20,7 +20,7 @@ class BillingAccount(Base):
 
     BillingID = Column(Integer, primary_key=True, index=True, autoincrement=True)
     UserID = Column(Integer, ForeignKey('Users.UserID'))
-    Points = Column(Integer, default=0)
+    Points = Column(Integer, default=100)
     UpdatedAt = Column(DateTime, default=datetime.utcnow)
 
     user = relationship('User', back_populates='billing_accounts')

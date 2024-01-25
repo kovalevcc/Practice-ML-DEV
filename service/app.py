@@ -1,13 +1,13 @@
 import os
 import streamlit as st
 from database import SessionLocal, Base
-from crud import get_user_by_email, deduct_points, create_prediction, get_prediction_cost,create_user
+from crud import get_billing_account, get_user_by_email, deduct_points, create_prediction, get_prediction_cost,create_user
 from tasks import make_prediction_task
 from auth import verify_password
 from schemas import *
 from sqlalchemy import create_engine
-from sqlalchemy import create_engine
 from database import Base
+import requests
 
 def save_uploaded_file(uploaded_file):
     try:
@@ -20,41 +20,36 @@ def save_uploaded_file(uploaded_file):
         return None
 
 
-# def initialize_database():
-#     DATABASE_URL = "sqlite:///db/database.db"  # Replace with your database URL
 
-#     # Extract directory path from database URL
-#     db_directory = os.path.dirname(DATABASE_URL.split("///")[1])
-
-#     # Create the directory if it does not exist
-#     if not os.path.exists(db_directory):
-#         os.makedirs(db_directory)
-
-#     # Create the database tables
-#     engine = create_engine(DATABASE_URL)
-#     Base.metadata.create_all(engine)
-#     print("Database initialized successfully.")
-
-# # Call the initialization at the start of your Streamlit app
-# initialize_database()
+def get_user_points(access_token):
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get("http://localhost:8000/billing/points", headers=headers)
+    if response.status_code == 200:
+        return response.json()["Points"]
+    else:
+        st.error("Failed to retrieve points.")
+        return None
 
 
 # Initialize the Streamlit app
 st.title('ML Prediction Service')
 
-# User authentication with JWT
-from auth import authenticate_user
-
 email = st.sidebar.text_input("Email")
 password = st.sidebar.text_input("Password", type="password")
 if st.sidebar.button('Login'):
-    with SessionLocal() as db:
-        access_token = authenticate_user(db, email, password)
-        if access_token:
-            st.session_state['access_token'] = access_token
-            st.sidebar.success('Logged in successfully!')
-        else:
-            st.sidebar.error('Invalid email or password')
+    response = requests.post("http://localhost:8000/auth/login", data={"username": email, "password": password})
+    if response.status_code == 200:
+        access_token = response.json()["access_token"]
+        st.session_state['access_token'] = access_token  # Store the access token in session_state
+        st.sidebar.success('Logged in successfully!')
+        # Get user balance after successful login
+        headers = {"Authorization": f"Bearer {access_token}"}
+        balance_response = requests.get("http://localhost:8000/billing/points", headers=headers)
+        if balance_response.status_code == 200:
+            balance = balance_response.json()["Points"]
+            st.sidebar.write(f"Balance: {balance} points")
+    else:
+        st.sidebar.error('Invalid email or password')
 
 with st.sidebar:
     st.subheader("Register")
@@ -72,36 +67,46 @@ with st.sidebar:
 
 model_choice = st.selectbox('Choose a model', ['model 1', 'model 2','model 3'])
 st.write("Upload a file for prediction")
+
 file = st.file_uploader("Upload File")
-if file is not None:
-    file_path = save_uploaded_file(file)
 
-
-# Make prediction
 if st.button('Make Prediction'):
-    if 'user_id' in st.session_state:
+    if 'access_token' in st.session_state:
         if file is not None:
-            file_path = save_uploaded_file(file)
-            if file_path:
-                with SessionLocal() as db:
-                    cost = get_prediction_cost(model_choice)
-                    if deduct_points(db, st.session_state['user_id'], cost):
-                        task = make_prediction_task.delay(st.session_state['user_id'], model_choice, file_path)
-                        st.session_state['task_id'] = task.id
-                        st.write('Prediction is being processed...')
-                        st.write(f'Task ID: {task.id}')
-                    else:
-                        st.error('Insufficient points for this prediction.')
+            file_bytes = file.getvalue()
+
+            headers = {
+                "Authorization": f"Bearer {st.session_state['access_token']}"
+            }
+
+            data = {
+                "model_name": model_choice
+            }
+
+            response = requests.post(
+                "http://localhost:8000/prediction",
+                headers=headers,
+                files={"file": (file.name, file_bytes)},
+                data=data
+            )
+
+            if response.status_code == 200:
+                st.write('Prediction is being processed...')
+                prediction_filename = response.json()["file_name"]
+                st.session_state['prediction_filename'] = prediction_filename 
+            else:
+                st.error('Error making prediction. Response code: ' + str(response.status_code))
         else:
             st.error('Please upload a file to make a prediction.')
     else:
         st.error('Please login to make a prediction.')
+        
 
-# Display prediction results
 if 'task_id' in st.session_state:
-    with SessionLocal() as db:
-        prediction = create_prediction(db, st.session_state['user_id'], model_choice, input_data)
-        if prediction:
-            st.write('Prediction result:', prediction.PredictionResult)
-        else:
-            st.write('Prediction is still being processed, please wait.')
+    headers = {"Authorization": f"Bearer {st.session_state['access_token']}"}
+    response = requests.get(f"http://localhost:8000/prediction/results?task_id={st.session_state['task_id']}", headers=headers)
+    if response.status_code == 200:
+        prediction_result = response.json()["PredictionResult"]
+        st.write('Prediction result:', prediction_result)
+    else:
+        st.write('Prediction is still being processed, please wait.')
